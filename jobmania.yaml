@@ -1,0 +1,73 @@
+---
+- hosts: vhosts
+  become: true
+  serial: 1 
+  gather_facts: False
+
+  vars:
+    templates_access: ~/.ansible/templates
+    nginx_sites: /etc/nginx/sites-available
+    enabled_sites: /etc/nginx/sites-enabled
+    html_access: /var/www/html
+
+  tasks: 
+    - name: Choix du vhost (un seul vhost à la fois)
+      command: hostname
+  
+    - name: Installation of NGINX
+      apt:
+        name: nginx
+        state: latest
+        update_cache: yes
+
+    - name: Create the log directory
+      file:
+         path: /etc/logs
+         state: directory  
+
+    - name: Delete default nginx config file
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent       
+
+    - name: Deploy the Nginx config file from a template
+      template: 
+        src: ~/.ansible/templates/vhost.conf
+        dest: /etc/nginx/sites-available/vhost.conf
+        # notify: restart nginx
+      become: yes
+
+    - name: Deploy the website from a template
+      copy:
+        src: ~/.ansible/templates/website.html
+        dest: /var/www/html/website.html
+
+    - name: Create the symlinc file to enable the new config file and restart nginx
+      file: 
+        src: /etc/nginx/sites-available/vhost.conf
+        dest: /etc/nginx/sites-enabled/vhost.conf
+        state: link
+      notify: restart nginx
+    
+    - name: Nginx Configuration Check
+      command: "sudo nginx -t"
+      register: result
+      changed_when: "result.rc != 0"
+      check_mode: no 
+
+
+
+    - name: determine vhosts
+      command: "/bin/ls /etc/nginx/sites-enabled/"
+      register: vhosts
+
+
+    - debug:
+        msg: "{{ vhosts }}" 
+
+
+  handlers:
+   - name: restart nginx
+     service:
+       name: nginx
+       state: restarted 
